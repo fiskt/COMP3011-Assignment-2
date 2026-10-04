@@ -4,13 +4,14 @@
  * 
  * Authors:
  *   1. Simon Ratcliffe, in collaboration with GPT-5.6 Terra
- *   2. <student name and student number insert here upon modification>
+ *   2. Jerry Wu, a1911280
  *
  * Copyright 2026 Simon Ratcliffe
  */
 package comp3011;
 
 import java.io.File;
+import java.util.List;
 import java.util.function.BiConsumer;
 
 import javafx.scene.Scene;
@@ -33,11 +34,16 @@ public class VideoPlayerController {
 
     public VideoPlayerController(
             boolean audioEnabled,
-            BiConsumer<Integer, Integer> videoSizeChangedHandler) {
+            // Get the frame processor list as a param
+            List<CommandLineController.FPOptions> frameProcessors,
+            BiConsumer<Integer, Integer> videoSizeChangedHandler
+    ) {
         this.view = new VideoPlayerView();
         this.videoSizeChangedHandler = videoSizeChangedHandler;
         model = new VideoPlayerModel(
                 audioEnabled,
+                // Pass the frame processor VideoPlayerModel
+                frameProcessors,
                 this::onVideoSizeChanged,
                 this::onFrameReady,
                 this::onStatusChanged,

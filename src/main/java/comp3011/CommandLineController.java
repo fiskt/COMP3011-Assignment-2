@@ -4,7 +4,7 @@
  * 
  * Authors:
  *   1. Simon Ratcliffe, in collaboration with GPT-5.6 Terra
- *   2. <student name and student number insert here upon modification>
+ *   2. Jerry Wu, a1911280
  *
  * Copyright 2026 Simon Ratcliffe
  */
@@ -51,10 +51,12 @@ public class CommandLineController {
 
     private List<FPOptions> frameProcessors = new ArrayList<>();
 
+    // Maps for short form input (E.g. -n -s) and long form input (E.g. -number-frames)
     // Ref: https://www.geeksforgeeks.org/java/map-interface-in-java/
     private static final Map<Character, FPOptions> shortFrameProcessors = new HashMap<>();
     private static final Map<String, FPOptions> longFrameProcessors = new HashMap<>();
 
+    // Add options when this is first run
     static {
         // Add short form frame processors to the map
         shortFrameProcessors.put('n', FPOptions.NUMBER_FRAMES);
@@ -124,16 +126,23 @@ public class CommandLineController {
 
     private void parseShortFP(String s) {
         List<FPOptions> temp = new ArrayList<>();
+
+        // Exclude the "-" and turn the input string into a char array
         char[] fp = s.substring(1).toCharArray();
         for (char curr : fp) {
+            // Get the enum result from the short form map
             FPOptions fpOption = shortFrameProcessors.get(curr);
             if (fpOption == null) {
+                // If the inputed option doesnt exist in the map, set temp to null
+                // and set the error
                 errorMessage = "Unknown option: " + s;
                 temp = null;
                 break;
             }
             temp.add(fpOption);
         }
+        // The input options are all valid, add them all to the 
+        // frame processor list
         if (temp != null) frameProcessors.addAll(temp);
     }
 
@@ -175,6 +184,10 @@ public class CommandLineController {
                 errorMessage = "No video file specified.";
             }
         }
+    }
+
+    public List<FPOptions> getFP() {
+        return frameProcessors;
     }
 
     private void setDisplayId(int displayId) {

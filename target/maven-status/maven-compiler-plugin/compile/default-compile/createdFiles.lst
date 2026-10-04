@@ -8,8 +8,10 @@ comp3011/FrameJitterer.class
 comp3011/FrameMottler.class
 comp3011/VideoPlayerModel$PreparedFrame.class
 comp3011/VideoPlayerAppLauncher.class
+comp3011/CommandLineController$FPOptions.class
 comp3011/VideoPlayerModel$PendingAudio.class
 comp3011/InfoVideo.class
+comp3011/VideoPlayerModel$2.class
 comp3011/FrameNumberer.class
 comp3011/FrameScratcher.class
 comp3011/FrameVignetter.class

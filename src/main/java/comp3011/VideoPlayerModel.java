@@ -4,7 +4,7 @@
  * 
  * Authors:
  *   1. Simon Ratcliffe, in collaboration with GPT-5.6 Terra
- *   2. <student name and student number insert here upon modification>
+ *   2. Jerry Wu, a1911280
  *
  * Copyright 2026 Simon Ratcliffe
  */
@@ -23,6 +23,7 @@ import org.bytedeco.javacv.Frame;
 import org.bytedeco.javacv.FrameGrabber;
 import org.bytedeco.javacv.JavaFXFrameConverter;
 
+import comp3011.CommandLineController.FPOptions;
 import javafx.animation.AnimationTimer;
 import javafx.application.Platform;
 import javafx.scene.image.Image;
@@ -91,6 +92,8 @@ public class VideoPlayerModel {
 
     public VideoPlayerModel(
             boolean audioEnabled,
+            // Take in the frame processor list as a parameter
+            List<CommandLineController.FPOptions> frameProcessorOptions,
             BiConsumer<Integer, Integer> videoSizeChangedHandler,
             Consumer<Image> frameReadyHandler,
             Consumer<String> statusChangedHandler,
@@ -104,18 +107,27 @@ public class VideoPlayerModel {
         this.audioOutputStateChangedHandler = audioOutputStateChangedHandler;
         this.frameProcessors = new ArrayList<>();
 
-        //  frameProcessors.add(new FrameBleeder());
-        //  frameProcessors.add(new FrameScratcher());
-        //  frameProcessors.add(new FrameDuster());
-        //  frameProcessors.add(new FramePepperer());
-        //  frameProcessors.add(new FrameBlackAndWhiter());
-        //  frameProcessors.add(new FrameYellower());
-        //  frameProcessors.add(new FrameVignetter());
-        //  frameProcessors.add(new FrameFlickerer());
-        //  frameProcessors.add(new FrameJitterer());
-        //  frameProcessors.add(new FrameNumberer());
+        // Loop through the frame processor list from 
+        // CommandLineController and add the frame processors
+        for (FPOptions option : frameProcessorOptions) {
+            frameProcessors.add(newFP(option));
+        }
+    }
 
-        // Add effects based on terminal input
+    private FrameProcessor newFP(CommandLineController.FPOptions fpOption) {
+        return switch (fpOption) {
+            case NUMBER_FRAMES -> new FrameNumberer();
+            case SCRATCH_FRAMES -> new FrameScratcher();
+            case FLICKER_FRAMES -> new FrameFlickerer();
+            case BLACK_AND_WHITE -> new FrameBlackAndWhiter();
+            case YELLOW_FRAMES -> new FrameYellower();
+            case VIGNETTE_FRAMES -> new FrameVignetter();
+            case DUST_FRAMES -> new FrameDuster();
+            case JITTER_FRAMES -> new FrameJitterer();
+            case MOTTLE_FRAMES -> new FrameMottler();
+            case BLEED_FRAMES -> new FrameBleeder();
+            case PEPPER_FRAMES -> new FramePepperer();
+        };
     }
 
     public void play(File file) {

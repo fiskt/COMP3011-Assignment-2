@@ -12,7 +12,9 @@ package comp3011;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Created in the VideoPlayerApp's main function to receive and parse the video player's command-line arguments.
@@ -32,6 +34,54 @@ public class CommandLineController {
     private Integer displayId;
     private File videoFile;
     private String errorMessage;
+
+    enum FPOptions {
+        NUMBER_FRAMES,
+        SCRATCH_FRAMES,
+        FLICKER_FRAMES,
+        BLACK_AND_WHITE,
+        YELLOW_FRAMES,
+        VIGNETTE_FRAMES,
+        DUST_FRAMES,
+        JITTER_FRAMES,
+        MOTTLE_FRAMES,
+        BLEED_FRAMES,
+        PEPPER_FRAMES
+    }
+
+    private List<FPOptions> frameProcessors = new ArrayList<>();
+
+    // Ref: https://www.geeksforgeeks.org/java/map-interface-in-java/
+    private static final Map<Character, FPOptions> shortFrameProcessors = new HashMap<>();
+    private static final Map<String, FPOptions> longFrameProcessors = new HashMap<>();
+
+    static {
+        // Add short form frame processors to the map
+        shortFrameProcessors.put('n', FPOptions.NUMBER_FRAMES);
+        shortFrameProcessors.put('s', FPOptions.SCRATCH_FRAMES);
+        shortFrameProcessors.put('f', FPOptions.FLICKER_FRAMES);
+        shortFrameProcessors.put('w', FPOptions.BLACK_AND_WHITE);
+        shortFrameProcessors.put('y', FPOptions.YELLOW_FRAMES);
+        shortFrameProcessors.put('v', FPOptions.VIGNETTE_FRAMES);
+        shortFrameProcessors.put('d', FPOptions.DUST_FRAMES);
+        shortFrameProcessors.put('j', FPOptions.JITTER_FRAMES);
+        shortFrameProcessors.put('m', FPOptions.MOTTLE_FRAMES);
+        shortFrameProcessors.put('b', FPOptions.BLEED_FRAMES);
+        shortFrameProcessors.put('p', FPOptions.PEPPER_FRAMES);
+        
+        // Add long form frame processor to the map
+        longFrameProcessors.put("--number-frames", FPOptions.NUMBER_FRAMES);
+        longFrameProcessors.put("--scratch-frames", FPOptions.SCRATCH_FRAMES);
+        longFrameProcessors.put("--flicker-frames", FPOptions.FLICKER_FRAMES);
+        longFrameProcessors.put("--black-and-white", FPOptions.BLACK_AND_WHITE);
+        longFrameProcessors.put("--yellow-frames", FPOptions.YELLOW_FRAMES);
+        longFrameProcessors.put("--vignette-frames", FPOptions.VIGNETTE_FRAMES);
+        longFrameProcessors.put("--dust-frames", FPOptions.DUST_FRAMES);
+        longFrameProcessors.put("--jitter-frames", FPOptions.JITTER_FRAMES);
+        longFrameProcessors.put("--mottle-frames", FPOptions.MOTTLE_FRAMES);
+        longFrameProcessors.put("--bleed-frames", FPOptions.BLEED_FRAMES);
+        longFrameProcessors.put("--pepper-frames", FPOptions.PEPPER_FRAMES);
+    }
 
     public CommandLineController(String[] args) {
         this.args = args.clone();
@@ -72,6 +122,21 @@ public class CommandLineController {
         return errorMessage == null && videoFile != null;
     }
 
+    private void parseShortFP(String s) {
+        List<FPOptions> temp = new ArrayList<>();
+        char[] fp = s.substring(1).toCharArray();
+        for (char curr : fp) {
+            FPOptions fpOption = shortFrameProcessors.get(curr);
+            if (fpOption == null) {
+                errorMessage = "Unknown option: " + s;
+                temp = null;
+                break;
+            }
+            temp.add(fpOption);
+        }
+        if (temp != null) frameProcessors.addAll(temp);
+    }
+
     private void parse() {
         List<String> videoFiles = new ArrayList<>();
         for (String arg : args) {
@@ -85,6 +150,11 @@ public class CommandLineController {
                 setDisplayId(1);
             } else if ("-2".equals(arg) || "--monitor-2".equals(arg)) {
                 setDisplayId(2);
+            } else if (longFrameProcessors.containsKey(arg)) {
+                // Add the corresponding enum to the frame processor list
+                frameProcessors.add(longFrameProcessors.get(arg));
+            } else if (!arg.startsWith("--") && arg.startsWith("-") && arg.length() > 1) {
+                parseShortFP(arg);
             } else if (arg.startsWith("-")) {
                 errorMessage = "Unknown option: " + arg;
             } else {
@@ -124,5 +194,18 @@ public class CommandLineController {
         System.out.println("  -x, --maximise     Open the player maximised");
         System.out.println("  -1, --monitor-1    Open the player on display 1");
         System.out.println("  -2, --monitor-2    Open the player on display 2");
+        System.out.println();
+        System.out.println("Frame processors:");
+        System.out.println("  -n, --number-frames    Render the frame number onto each frame");
+        System.out.println("  -s, --scratch-frames   Render vertical film scratches");
+        System.out.println("  -f, --flicker-frames   Randomly dim frames");
+        System.out.println("  -w, --black-and-white  Convert frames to black and white");
+        System.out.println("  -y, --yellow-frames    Apply a warmer colour temperature");
+        System.out.println("  -v, --vignette-frames  Darken the frame edges");
+        System.out.println("  -d, --dust-frames      Render dust and hair marks");
+        System.out.println("  -j, --jitter-frames    Randomly displace frames by a few pixels");
+        System.out.println("  -m, --mottle-frames    Add cloudy emulsion mottling");
+        System.out.println("  -b, --bleed-frames     Bleed light into frames");
+        System.out.println("  -p, --pepper-frames    Pepper frames with dark spots/blotches");
     }
 }

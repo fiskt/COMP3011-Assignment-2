@@ -114,6 +114,8 @@ public class VideoPlayerModel {
         //  frameProcessors.add(new FrameFlickerer());
         //  frameProcessors.add(new FrameJitterer());
         //  frameProcessors.add(new FrameNumberer());
+
+        // Add effects based on terminal input
     }
 
     public void play(File file) {

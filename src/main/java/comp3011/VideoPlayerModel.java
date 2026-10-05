@@ -15,6 +15,8 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Queue;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
@@ -72,7 +74,7 @@ public class VideoPlayerModel {
     private JavaFXFrameConverter converter; // Takes Frame objects to JavaFX Image objects, which can be put on screen.
     private AudioPlayer audioPlayer; // This is ours. It has some real time buffering smarts.
     private PreparedFrame preparedFrame; // Ours, but is just an Image with some meta-data added.
-    private boolean prepareNextFrameQueued; // True only when the event loop needs to call our prepareNextFrame method.
+    
     private boolean playbackOpen; // True when playback is happening.
     private boolean pauseRequested;
     private boolean audioOutputEnabled;
@@ -89,6 +91,37 @@ public class VideoPlayerModel {
     private long playbackStartNs;
     private long pauseStartedNs;
     private long relativeSeekBaseUs = NO_SEEK_REQUEST;
+
+
+    // New thread for getting the frames
+    private Thread getFramesThread;
+    private boolean isGettingFrames;
+
+    // Blocking queue for storing upcoming frames (1 frame lookahead)
+    private final BlockingQueue<PreparedFrame> nextFrames = new ArrayBlockingQueue<>(1);
+
+    private void getFrames() {
+        while (isGettingFrames) {
+            PreparedFrame f;
+            try {
+                // Try to read the next frame in the video file
+                f = readNextVideoFrame();
+            } catch (Exception e) {
+                break;
+            }
+
+            // If the frame is null (end of video or playback end), break the loop
+            if (f == null) break;
+
+            try {
+                // Try to add the frame to the nextFrames array
+                nextFrames.put(f);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+    }
 
     public VideoPlayerModel(
             boolean audioEnabled,
@@ -243,6 +276,13 @@ public class VideoPlayerModel {
         try {
             openPlaybackResources(startTimestampUs);
             resetPlaybackClock(currentTimestampUs);
+
+            // Start reading the next frames and adding them to the 
+            // nextFrames array
+            isGettingFrames = true;
+            getFramesThread = new Thread(this::getFrames);
+            getFramesThread.start();
+
             playbackOpen = true;
             playbackTimer.start();
             prepareNextFrame();
@@ -307,11 +347,8 @@ public class VideoPlayerModel {
             return;
         }
 
-        try {
-            preparedFrame = readNextVideoFrame();
-        } catch (Exception e) {
-            handlePlaybackError(e);
-        }
+        // Take the next prepared frame from the nextFrames array
+        preparedFrame = nextFrames.poll();
     }
 
     private PreparedFrame readNextVideoFrame() throws Exception {
@@ -396,20 +433,10 @@ public class VideoPlayerModel {
             displayPreparedFrame(now);
         }
 
-        // Task (3). We'll try and be nice to the GUI event loop here by queueing the prepareNextFrame call rather than
-        // hogging the thread and doing it here, hence the tricky callback and use of prepareNextFrameQueued. Feel free
-        // to replace this whole block with simple linear control flow logic
-        // such as: if (!pauseRequested && preparedFrame == null) prepareNextFrame();
-        // to compare.
-        if (!pauseRequested && preparedFrame == null && !prepareNextFrameQueued) {
-            prepareNextFrameQueued = true;
-            Platform.runLater(() -> {
-                prepareNextFrameQueued = false;
-
-                if (!pauseRequested) {
-                    prepareNextFrame();
-                }
-            });
+        // Task (3)
+        // Take the next frame once preparedFrame has been displayed and set to null
+        if (!pauseRequested && preparedFrame == null) {
+            prepareNextFrame();
         }
     }
 
@@ -500,6 +527,11 @@ public class VideoPlayerModel {
     }
 
     private void closePlaybackResources() {
+        // Stop the getFrames loop, clear the current nextFrames array
+        // so the thread doesn't get stuck on the blocking array
+        isGettingFrames = false;
+        nextFrames.clear();
+
         playbackTimer.stop();
         playbackOpen = false;
         preparedFrame = null;

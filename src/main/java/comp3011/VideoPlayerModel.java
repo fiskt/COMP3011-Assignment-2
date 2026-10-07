@@ -97,7 +97,7 @@ public class VideoPlayerModel {
     // Get the number of available cores 
     // Save 1 core for basic functionality of the app
     int numCores = Math.max(1, Runtime.getRuntime().availableProcessors() - 1);
-    
+
     // Source - https://stackoverflow.com/a/51551555
     // Posted by Vinay
     // Retrieved 2026-10-07, License - CC BY-SA 4.0
@@ -145,7 +145,9 @@ public class VideoPlayerModel {
             if (rf == null) break;
 
             try {
-                // Try to add the frame to the orderedFrames array
+                // Try to add the frame to a free slot in rawFrames
+                // If there are no free slots (rawFrames blocks put), then
+                // the thread will wait for the free slot
                 rawFrames.put(rf);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
@@ -189,6 +191,7 @@ public class VideoPlayerModel {
                     frameSlots.acquire();
                     processedFrames.put(pf.frameNumber(), pf);
                 } catch (InterruptedException e) {
+                    // Exits the try/catch block if processedFrames.put fails
                     Thread.currentThread().interrupt();
                     break;
                 } catch (Exception e) {
@@ -199,6 +202,48 @@ public class VideoPlayerModel {
         } finally {
             localConverter.close();
         }
+    }
+
+    private void startFrameThreads() {
+        isGettingFrames = true;
+
+        // Create and start a thread for getFramesLoop 
+        getFramesThread = new Thread(this::getFramesLoop);
+        getFramesThread.start();
+
+        // Create and start numCores threads for processFramesLoop
+        for (int i = 0; i < numCores; i++) {
+            Thread workerThread = new Thread(this::processFramesLoop);
+            workerThread.start();
+
+            // Add the threads to an array
+            processFramesThreads.add(workerThread);
+        }
+    }
+
+    private void stopFrameThreads() {
+        isGettingFrames = false;
+        rawFrames.clear();
+        processedFrames.clear();
+
+        if (getFramesThread != null) {
+            getFramesThread.interrupt();
+            try {
+                getFramesThread.join();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+
+        for (Thread workerThread : processFramesThreads) {
+            workerThread.interrupt();
+            try {
+                workerThread.join();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+        processFramesThreads.clear();
     }
 
     public VideoPlayerModel(
@@ -330,9 +375,16 @@ public class VideoPlayerModel {
         }
 
         try {
+            // Stop getting and processing frames first
+            stopFrameThreads();
+
             grabber.setTimestamp(grabTimestampUs);
             resetPlaybackClock(logicalTimestampUs);
             flushAudioOutput();
+
+            // Start getting and processing frames once the resets are done
+            startFrameThreads();
+
             prepareNextFrame();
             notifyPlaybackStateChanged();
         } catch (Exception e) {
@@ -356,18 +408,8 @@ public class VideoPlayerModel {
             resetPlaybackClock(currentTimestampUs);
             playbackOpen = true;
 
-            // Start reading the next frames and adding them to the 
-            // orderedFrames array
-            isGettingFrames = true;
-            getFramesThread = new Thread(this::getFramesLoop);
-            getFramesThread.start();
-
-            // Start the process loop
-            for (int i = 0; i < numCores; i++) {
-                Thread processFramesWorker = new Thread(this::processFramesLoop);
-                processFramesWorker.start();
-                processFramesThreads.add(processFramesWorker);
-            }
+            // Start getting and processing frames once playback opens
+            startFrameThreads();
 
             playbackTimer.start();
             prepareNextFrame();
@@ -416,6 +458,7 @@ public class VideoPlayerModel {
         relativeSeekBaseUs = logicalTimestampUs;
         firstTimestampUs = NO_SEEK_REQUEST;
 
+        // Reset the frame index, arrays and semaphore
         nextFrameNumber = NO_FRAME_SET;
         processedFrames.clear();
         frameSlots.drainPermits();
@@ -616,14 +659,9 @@ public class VideoPlayerModel {
         notifyPlaybackStateChanged();
     }
 
-    private void closePlaybackResources() {
-        // Stop the getFramesLoop loop, clear the current orderedFrames array
-        // so the thread doesn't get stuck on the blocking array
-        isGettingFrames = false;
-        processedFrames.clear();
-
-        // Clear the raw frames array
-        rawFrames.clear();
+    private void closePlaybackResources() {    
+        // Stop the getting and processing threads
+        stopFrameThreads();
 
         playbackTimer.stop();
         playbackOpen = false;

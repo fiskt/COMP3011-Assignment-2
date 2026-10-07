@@ -17,6 +17,9 @@ import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
@@ -27,7 +30,6 @@ import org.bytedeco.javacv.JavaFXFrameConverter;
 
 import comp3011.CommandLineController.FPOptions;
 import javafx.animation.AnimationTimer;
-import javafx.application.Platform;
 import javafx.scene.image.Image;
 
 /**
@@ -75,7 +77,7 @@ public class VideoPlayerModel {
     private AudioPlayer audioPlayer; // This is ours. It has some real time buffering smarts.
     private PreparedFrame preparedFrame; // Ours, but is just an Image with some meta-data added.
     
-    private boolean playbackOpen; // True when playback is happening.
+    private volatile boolean playbackOpen; // True when playback is happening.
     private boolean pauseRequested;
     private boolean audioOutputEnabled;
     private boolean audioAvailable;
@@ -92,34 +94,110 @@ public class VideoPlayerModel {
     private long pauseStartedNs;
     private long relativeSeekBaseUs = NO_SEEK_REQUEST;
 
+    // Get the number of available cores 
+    // Save 1 core for basic functionality of the app
+    int numCores = Math.max(1, Runtime.getRuntime().availableProcessors() - 1);
+    
+    // Source - https://stackoverflow.com/a/51551555
+    // Posted by Vinay
+    // Retrieved 2026-10-07, License - CC BY-SA 4.0
+    private final Semaphore frameSlots = new Semaphore(numCores);
 
     // New thread for getting the frames
     private Thread getFramesThread;
-    private boolean isGettingFrames;
 
-    // Blocking queue for storing upcoming frames (1 frame lookahead)
-    private final BlockingQueue<PreparedFrame> nextFrames = new ArrayBlockingQueue<>(1);
+    // volatile guarantees that the threads will see the updated status
+    private volatile boolean isGettingFrames;
 
-    private void getFrames() {
+    private final List<Thread> processFramesThreads = new ArrayList<>();
+
+    private record RawFrame(
+        Frame frame,
+        InfoFrame info, 
+        long logicalTimestampUs,
+        long targetTimeNs
+    ) {}
+
+    // Blocking queue for storing raw
+    private final BlockingQueue<RawFrame> rawFrames = new ArrayBlockingQueue<>(numCores);
+
+    // Map for storing processed frames
+    private final ConcurrentHashMap<Integer, PreparedFrame> processedFrames = new ConcurrentHashMap<>();
+
+    private static int NO_FRAME_SET = -1;
+    private volatile int nextFrameNumber = NO_FRAME_SET;
+
+    private void getFramesLoop() {
         while (isGettingFrames) {
-            PreparedFrame f;
+            RawFrame rf;
             try {
                 // Try to read the next frame in the video file
-                f = readNextVideoFrame();
+                rf = readNextVideoFrame();
             } catch (Exception e) {
+                // Source - https://stackoverflow.com/a/69494970
+                // Posted by Neeraj Gahlawat
+                // Retrieved 2026-10-06, License - CC BY-SA 4.0
+                e.printStackTrace();
                 break;
             }
 
             // If the frame is null (end of video or playback end), break the loop
-            if (f == null) break;
+            if (rf == null) break;
 
             try {
-                // Try to add the frame to the nextFrames array
-                nextFrames.put(f);
+                // Try to add the frame to the orderedFrames array
+                rawFrames.put(rf);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 break;
             }
+        }
+    }
+
+    private void processFramesLoop() {
+        JavaFXFrameConverter localConverter = new JavaFXFrameConverter();
+        try {
+            while (isGettingFrames) {
+                RawFrame rf;
+                try {
+                    // Get a raw frame from the raw frames array
+                    // If it can't get one within 100 ms, give up and try again
+                    // This prevents the loop from getting stuck waiting for a new raw frame
+                    // and missing isGettingFrames turning false
+                    // Source - https://www.geeksforgeeks.org/java/arrayblockingqueue-poll-method-in-java/
+                    rf = rawFrames.poll(100, TimeUnit.MILLISECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+                if (rf == null) continue;
+
+                try {
+                    // From the original readNextVideoFrame function
+                    processFrame(rf.frame(), rf.info());
+                    Image image = localConverter.convert(rf.frame());
+
+                    PreparedFrame pf = new PreparedFrame(
+                        image, 
+                        rf.info().frameNumber(), 
+                        rf.info().timestampUs(), 
+                        rf.logicalTimestampUs(), 
+                        rf.targetTimeNs(), 
+                        System.nanoTime()
+                    );
+
+                    frameSlots.acquire();
+                    processedFrames.put(pf.frameNumber(), pf);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    break;
+                }
+            }
+        } finally {
+            localConverter.close();
         }
     }
 
@@ -276,14 +354,21 @@ public class VideoPlayerModel {
         try {
             openPlaybackResources(startTimestampUs);
             resetPlaybackClock(currentTimestampUs);
+            playbackOpen = true;
 
             // Start reading the next frames and adding them to the 
-            // nextFrames array
+            // orderedFrames array
             isGettingFrames = true;
-            getFramesThread = new Thread(this::getFrames);
+            getFramesThread = new Thread(this::getFramesLoop);
             getFramesThread.start();
 
-            playbackOpen = true;
+            // Start the process loop
+            for (int i = 0; i < numCores; i++) {
+                Thread processFramesWorker = new Thread(this::processFramesLoop);
+                processFramesWorker.start();
+                processFramesThreads.add(processFramesWorker);
+            }
+
             playbackTimer.start();
             prepareNextFrame();
             notifyPlaybackStateChanged();
@@ -330,6 +415,12 @@ public class VideoPlayerModel {
         currentTimestampUs = logicalTimestampUs;
         relativeSeekBaseUs = logicalTimestampUs;
         firstTimestampUs = NO_SEEK_REQUEST;
+
+        nextFrameNumber = NO_FRAME_SET;
+        processedFrames.clear();
+        frameSlots.drainPermits();
+        frameSlots.release(numCores);
+
         logicalPlaybackBaseUs = logicalTimestampUs;
         playbackStartNs = 0;
         pauseStartedNs = pauseRequested ? System.nanoTime() : 0;
@@ -347,11 +438,16 @@ public class VideoPlayerModel {
             return;
         }
 
-        // Take the next prepared frame from the nextFrames array
-        preparedFrame = nextFrames.poll();
+        // Take the correct prepared frame from the processedFrames array
+        PreparedFrame nextFrame = processedFrames.remove(nextFrameNumber);
+        if (nextFrame != null) {
+            preparedFrame = nextFrame;
+            nextFrameNumber++;
+            frameSlots.release();
+        }
     }
 
-    private PreparedFrame readNextVideoFrame() throws Exception {
+    private RawFrame readNextVideoFrame() throws Exception {
         while (playbackOpen) {
             Frame frame = grabFrame();
             if (frame == null) {
@@ -393,21 +489,15 @@ public class VideoPlayerModel {
             }
 
             int frameNumber = grabber.getFrameNumber();
-            InfoFrame info = new InfoFrame(frameNumber, timestampUs);
-            processFrame(frame, info);
+            if (nextFrameNumber == NO_FRAME_SET) nextFrameNumber = frameNumber;
 
-            Image image = converter.convert(frame);
+            InfoFrame info = new InfoFrame(frameNumber, timestampUs);
+
             long relativeTimestampUs = Math.max(0, timestampUs - firstTimestampUs);
             long logicalTimestampUs = logicalPlaybackBaseUs + relativeTimestampUs;
             long targetTimeNs = playbackStartNs + relativeTimestampUs * 1_000L;
 
-            return new PreparedFrame(
-                    image,
-                    frameNumber,
-                    timestampUs,
-                    logicalTimestampUs,
-                    targetTimeNs,
-                    System.nanoTime());
+            return new RawFrame(frame.clone(), info, logicalTimestampUs, targetTimeNs);
         }
 
         return null;
@@ -527,10 +617,13 @@ public class VideoPlayerModel {
     }
 
     private void closePlaybackResources() {
-        // Stop the getFrames loop, clear the current nextFrames array
+        // Stop the getFramesLoop loop, clear the current orderedFrames array
         // so the thread doesn't get stuck on the blocking array
         isGettingFrames = false;
-        nextFrames.clear();
+        processedFrames.clear();
+
+        // Clear the raw frames array
+        rawFrames.clear();
 
         playbackTimer.stop();
         playbackOpen = false;

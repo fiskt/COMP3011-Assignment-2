@@ -118,7 +118,7 @@ public class VideoPlayerModel {
         long targetTimeNs
     ) {}
 
-    // Blocking queue for storing raw
+    // Blocking queue for storing numCores number of raw frames
     private final BlockingQueue<RawFrame> rawFrames = new ArrayBlockingQueue<>(numCores);
 
     // Map for storing processed frames

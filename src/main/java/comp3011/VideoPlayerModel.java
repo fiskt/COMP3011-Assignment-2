@@ -30,6 +30,7 @@ import org.bytedeco.javacv.JavaFXFrameConverter;
 
 import comp3011.CommandLineController.FPOptions;
 import javafx.animation.AnimationTimer;
+import javafx.application.Platform;
 import javafx.scene.image.Image;
 
 /**
@@ -494,7 +495,15 @@ public class VideoPlayerModel {
         while (playbackOpen) {
             Frame frame = grabFrame();
             if (frame == null) {
-                finishPlayback();
+                // Source - https://stackoverflow.com/a/32489845
+                // Posted by Martin Pfeffer, modified by community. See post 'Timeline' for change history
+                // Retrieved 2026-10-18, License - CC BY-SA 4.0
+                //
+                // Exception in thread "Thread-4" java.lang.IllegalStateException: Not on FX application thread;
+                // This error occurs when running finishPlayback on a non FX thread
+                // Platform.runLater fixes this error by running finishPlaybak on the FX thread
+                // since only FX threads can modify UI
+                Platform.runLater(this::finishPlayback);
                 return null;
             }
 

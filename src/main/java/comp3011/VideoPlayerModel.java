@@ -97,7 +97,8 @@ public class VideoPlayerModel {
 
     // Get the number of available cores 
     // Save 1 core for basic functionality of the app
-    int numCores = Math.max(1, Runtime.getRuntime().availableProcessors() - 1);
+    // and 1 for rendering
+    int numCores = Math.max(1, Runtime.getRuntime().availableProcessors() - 2);
 
     // Source - https://stackoverflow.com/a/51551555
     // Posted by Vinay

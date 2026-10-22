@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import comp3011.CommandLineController.FPOptions;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 public class CommandLineControllerTest {
     File tempVideo;
@@ -138,5 +139,76 @@ public class CommandLineControllerTest {
 
         assertEquals(2, longForm2.getDisplayId());
         assertEquals(2, shortForm2.getDisplayId());
+    }
+
+    @Test
+    void displayOptions_conflictingId_error() {
+        String[] args = {"-1", "-2", tempVideoPath};
+
+        CommandLineController output = new CommandLineController(args);
+
+        String expected = "Only one display option can be used";
+
+        assertEquals(expected, output.getErrorMessage());
+        assertEquals(1, output.getExitCode());
+    }
+
+    @Test
+    void videoPlayer_missingVideoFile_error() {
+        String[] args = {"-a"};
+
+        CommandLineController output = new CommandLineController(args);
+
+        String expected = "No video file specified.";
+
+        assertEquals(expected, output.getErrorMessage());
+        assertEquals(1, output.getExitCode());
+    }
+
+    @Test
+    void videoPlayer_nonexistantVideoFile_error() {
+        String[] args = {"video.mp4"};
+
+        CommandLineController output = new CommandLineController(args);
+
+        String expected = "File not found: ";
+
+        assertTrue(output.getErrorMessage().startsWith(expected));
+        assertNull(output.getVideoFile());
+        assertEquals(1, output.getExitCode());
+    }
+
+    @Test
+    void videoPlayer_multipleVideoFiles_error() {
+        String[] args = {tempVideoPath, tempVideoPath};
+
+        CommandLineController output = new CommandLineController(args);
+
+        String expected = "Usage: VideoPlayer [options] [video-file]";
+
+        assertEquals(expected, output.getErrorMessage());
+        assertEquals(1, output.getExitCode());
+    }
+
+    @Test
+    void videoPlayer_validVideoFile_launchPlayer() {
+        String[] args = {tempVideoPath};
+
+        CommandLineController output = new CommandLineController(args);
+
+        assertNull(output.getErrorMessage());
+        assertEquals(0, output.getExitCode());
+        assertTrue(output.shouldLaunchApplication());
+    }
+    
+    @Test
+    void videoPlayer_validBasicArgs_launchPlayer() {
+        String[] args = {"-a", "-x", "-1", tempVideoPath};
+
+        CommandLineController output = new CommandLineController(args);
+
+        assertNull(output.getErrorMessage());
+        assertEquals(0, output.getExitCode());
+        assertTrue(output.shouldLaunchApplication());
     }
 }

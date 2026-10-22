@@ -74,7 +74,14 @@ public class FrameMottler extends FrameProcessor {
 
     public FrameMottler() {
         super();
-        instanceIndex = nextInstanceIndex++;
+        this.instanceIndex = nextInstanceIndex++;
+    }
+
+    public FrameMottler(int instance) {
+        super();
+        // Using multiple FrameMottler objects (1 for each thread) so
+        // we need to be able to set instanceIndex explicitly
+        this.instanceIndex = instance;
     }
 
     @Override
@@ -86,14 +93,7 @@ public class FrameMottler extends FrameProcessor {
     }
 
     @Override
-    // AI assisted fix (Claude)
-    // Add synchronized to make sure only 1 thread can run process() on this object at a time
-
-    // Without synchronized, multiple threads try to access the damage masks
-    // If Thread A is the first to access, it sees no damage mask so sets the damage mask flag and starts building
-    // Thread B can access the damage mask arrays before Thread A is done building which gives the error
-    //      java.lang.NullPointerException: Cannot load from double array because "field" is null
-    public synchronized void process(Frame frame, InfoFrame info) throws Exception {
+    public void process(Frame frame, InfoFrame info) throws Exception {
         if (frame.image == null || frame.image.length == 0 || frame.image[0] == null) {
             return;
         }

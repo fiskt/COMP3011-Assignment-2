@@ -61,14 +61,7 @@ public class FrameBleeder extends FrameProcessor {
     }
 
     @Override
-    // Add synchronized so only 1 thread can run process() on the object
-    //
-    // The mask functions fully overwrites the arrays every time its run
-    // and applyBleed() reads it once the mask functions are done
-    // Without sychronized, Thread B can overwrite Thread A's mask arrays before 
-    // Thread A runs applyBleed() so Thread A's effect could be a mixture of different 
-    // frame data
-    public synchronized void process(Frame frame, InfoFrame info) throws Exception {
+    public void process(Frame frame, InfoFrame info) throws Exception {
         if (frame.image == null || frame.image.length == 0 || frame.image[0] == null) {
             return;
         }

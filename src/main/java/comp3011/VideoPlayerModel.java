@@ -111,6 +111,11 @@ public class VideoPlayerModel {
     // volatile guarantees that the threads will see the updated status
     private volatile boolean isGettingFrames;
 
+    // Used for initialising the local FrameBleeder, FrameMottler objects for each thread
+    // because they are created after readNextVideoFrame, which initialises the frame processors, is run
+    // volatile guarantees that each thread sees the copy when making the new objects
+    private volatile InfoVideo infoCopy = null;
+
     private final List<Thread> processFramesThreads = new ArrayList<>();
 
     private record RawFrame(
@@ -128,6 +133,36 @@ public class VideoPlayerModel {
 
     private static int NO_FRAME_SET = -1;
     private volatile int nextFrameNumber = NO_FRAME_SET;
+
+    // FrameBleed and FrameMottler uses shared variables that break the player when
+    // multiple threads try to access the shared arrays
+    // This function loops through the frame processors array built from processing the input
+    // For any FrameBleeder, FrameMottler inputs: creates new instances for the thread and adds them to the array
+    // For any other frame processor: just adds them to the array
+    private List<FrameProcessor> createWorkProcessors() throws Exception {
+        List<FrameProcessor> workProcessors = new ArrayList<>();
+        int mottleIndex = 0;
+
+        for (FrameProcessor fp : frameProcessors) {
+            if (fp instanceof FrameBleeder) {
+                // Create its own instance of FrameBleeder
+                FrameBleeder ownBleeder = new FrameBleeder();
+                ownBleeder.initialise(infoCopy);
+                workProcessors.add(ownBleeder);
+            } else if (fp instanceof FrameMottler) {
+                // Create its own instance of FrameMottler
+                FrameMottler ownMottler = new FrameMottler(mottleIndex);
+                ownMottler.initialise(infoCopy);
+                workProcessors.add(ownMottler);
+                mottleIndex++;
+            } else {
+                // Other frame processors dont need a local instance, so just add them
+                workProcessors.add(fp);
+            }
+        }
+
+        return workProcessors;
+    }
 
     private void getFramesLoop() {
         while (isGettingFrames) {
@@ -160,6 +195,7 @@ public class VideoPlayerModel {
 
     private void processFramesLoop() {
         JavaFXFrameConverter localConverter = new JavaFXFrameConverter();
+        List<FrameProcessor> workProcessors = null;
         try {
             while (isGettingFrames) {
                 RawFrame rf;
@@ -177,8 +213,12 @@ public class VideoPlayerModel {
                 if (rf == null) continue;
 
                 try {
+                    if (workProcessors == null) {
+                        workProcessors = createWorkProcessors();
+                    }
+
                     // From the original readNextVideoFrame function
-                    processFrame(rf.frame(), rf.info());
+                    processFrame(rf.frame(), rf.info(), workProcessors);
                     Image image = localConverter.convert(rf.frame());
 
                     PreparedFrame pf = new PreparedFrame(
@@ -518,18 +558,24 @@ public class VideoPlayerModel {
             }
 
             if (!frameProcessorsInitialised) {
-                initialiseFrameProcessors(new InfoVideo(
-                        mediaName(videoFile),
-                        totalVideoFrames,
-                        frame.imageWidth,
-                        frame.imageHeight,
-                        frame.imageDepth,
-                        frame.imageChannels,
-                        frame.imageStride,
-                        frameRate,
-                        intFrameRate,
-                        videoFrameDurationUs,
-                        grabber.getPixelFormat()));
+                InfoVideo info = new InfoVideo(
+                    mediaName(videoFile),
+                    totalVideoFrames,
+                    frame.imageWidth,
+                    frame.imageHeight,
+                    frame.imageDepth,
+                    frame.imageChannels,
+                    frame.imageStride,
+                    frameRate,
+                    intFrameRate,
+                    videoFrameDurationUs,
+                    grabber.getPixelFormat()
+                );
+                initialiseFrameProcessors(info);
+
+                // Save a copy of the frame info so it can be used to initialise the 
+                // local FrameBleeder, FrameMottler objects
+                infoCopy = info;
                 frameProcessorsInitialised = true;
             }
 
@@ -740,8 +786,8 @@ public class VideoPlayerModel {
         return Math.max(0, durationUs - frameDurationUs);
     }
 
-    private void processFrame(Frame frame, InfoFrame info) throws Exception {
-        for (FrameProcessor processor : frameProcessors) {
+    private void processFrame(Frame frame, InfoFrame info, List<FrameProcessor> workProcessors) throws Exception {
+        for (FrameProcessor processor : workProcessors) {
             processor.process(frame, info);
         }
     }

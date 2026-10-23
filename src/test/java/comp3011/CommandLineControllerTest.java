@@ -1,6 +1,5 @@
 package comp3011;
 
-import java.beans.Transient;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
@@ -13,9 +12,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import comp3011.CommandLineController.FPOptions;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class CommandLineControllerTest {
     File tempVideo;
@@ -104,6 +101,15 @@ public class CommandLineControllerTest {
         assertEquals(1, output.getExitCode());
     }
 
+    @Test
+    void helpOption_doesNotLaunchPlayer() {
+        String[] args = {"--help", tempVideoPath};
+
+        CommandLineController output = new CommandLineController(args);
+
+        assertFalse(output.shouldLaunchApplication());
+    }
+
     // Audio tests
     @Test
     void audioOption_playsAudio() {
@@ -162,6 +168,16 @@ public class CommandLineControllerTest {
 
         assertEquals(expected, output.getErrorMessage());
         assertEquals(1, output.getExitCode());
+    }
+
+    // Video tests
+    @Test
+    void videoPlayer_noOptions_launchPlayer() {
+        String[] args = {tempVideoPath};
+
+        CommandLineController output = new CommandLineController(args);
+
+        assertTrue(output.shouldLaunchApplication());
     }
 
     @Test

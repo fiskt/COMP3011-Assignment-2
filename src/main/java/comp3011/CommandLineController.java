@@ -123,7 +123,7 @@ public class CommandLineController {
     }
 
     public boolean shouldLaunchApplication() {
-        return errorMessage == null && videoFile != null;
+        return errorMessage == null && videoFile != null && !helpRequested;
     }
 
     private void parseShortFP(String s, List<FPOptions> parsedFP) {

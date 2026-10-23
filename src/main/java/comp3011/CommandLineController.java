@@ -126,7 +126,7 @@ public class CommandLineController {
         return errorMessage == null && videoFile != null;
     }
 
-    private void parseShortFP(String s) {
+    private void parseShortFP(String s, List<FPOptions> parsedFP) {
         List<FPOptions> temp = new ArrayList<>();
 
         // Exclude the "-" and turn the input string into a char array
@@ -145,11 +145,21 @@ public class CommandLineController {
         }
         // The input options are all valid, add them all to the 
         // frame processor list
-        if (temp != null) frameProcessors.addAll(temp);
+        if (temp != null) parsedFP.addAll(temp);
+    }
+
+    private void parseLongFP(String s, List<FPOptions> parsedFP) {
+        if (longFrameProcessors.containsKey(s)) {
+            parsedFP.add(longFrameProcessors.get(s));
+        } else {
+            errorMessage = "Unknown option: " + s;
+        }
     }
 
     private void parse() {
         List<String> videoFiles = new ArrayList<>();
+        List<FPOptions> parsedFP = new ArrayList<>();
+
         for (String arg : args) {
             if ("-h".equals(arg) || "--help".equals(arg)) {
                 helpRequested = true;
@@ -161,11 +171,10 @@ public class CommandLineController {
                 setDisplayId(1);
             } else if ("-2".equals(arg) || "--monitor-2".equals(arg)) {
                 setDisplayId(2);
-            } else if (longFrameProcessors.containsKey(arg)) {
-                // Add the corresponding enum to the frame processor list
-                frameProcessors.add(longFrameProcessors.get(arg));
+            } else if (arg.startsWith("--")) {
+                parseLongFP(arg, parsedFP);
             } else if (!arg.startsWith("--") && arg.startsWith("-") && arg.length() > 1) {
-                parseShortFP(arg);
+                parseShortFP(arg, parsedFP);
             } else if (arg.startsWith("-")) {
                 errorMessage = "Unknown option: " + arg;
             } else {
@@ -186,6 +195,8 @@ public class CommandLineController {
                 errorMessage = "No video file specified.";
             }
         }
+
+        if (errorMessage == null) frameProcessors.addAll(parsedFP);
     }
 
     public List<FPOptions> getFP() {

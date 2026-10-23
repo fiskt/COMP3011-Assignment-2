@@ -5,6 +5,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintStream;
+import java.util.List;
 
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.api.AfterEach;
@@ -91,6 +92,16 @@ public class CommandLineControllerTest {
 
         assertEquals(expected, longFormOutput);
         assertEquals(expected, shortFormOutput);
+    }
+
+    @Test
+    void helpOption_invalidOptions_error() {
+        String[] args = {"-z", "--help", tempVideoPath};
+
+        CommandLineController output = new CommandLineController(args);
+
+        assertTrue(output.getErrorMessage().startsWith("Unknown option: "));
+        assertEquals(1, output.getExitCode());
     }
 
     // Audio tests
@@ -210,5 +221,132 @@ public class CommandLineControllerTest {
         assertNull(output.getErrorMessage());
         assertEquals(0, output.getExitCode());
         assertTrue(output.shouldLaunchApplication());
+    }
+
+    @Test
+    void frameProcessor_shortForm_parsed() {
+        String[] args = {"-n", tempVideoPath};
+
+        CommandLineController output = new CommandLineController(args);
+
+        List<FPOptions> expected = List.of(FPOptions.NUMBER_FRAMES);
+
+        assertEquals(expected, output.getFP());
+    }
+
+    @Test
+    void frameProcessor_longForm_parsed() {
+        String[] args = {"--number-frames", tempVideoPath};
+
+        CommandLineController output = new CommandLineController(args);
+
+        List<FPOptions> expected = List.of(FPOptions.NUMBER_FRAMES);
+
+        assertEquals(expected, output.getFP());
+    }
+
+    @Test
+    void frameProcessor_multipleShortForm_parsed() {
+        String[] args = {"-ns", tempVideoPath};
+
+        CommandLineController output = new CommandLineController(args);
+
+        List<FPOptions> expected = List.of(
+            FPOptions.NUMBER_FRAMES,
+            FPOptions.SCRATCH_FRAMES
+        );
+
+        assertEquals(expected, output.getFP());
+    }
+
+    @Test
+    void frameProcessor_multipleLongForm_parsed() {
+        String[] args = {"--number-frames", "--scratch-frames", tempVideoPath};
+
+        CommandLineController output = new CommandLineController(args);
+
+        List<FPOptions> expected = List.of(
+            FPOptions.NUMBER_FRAMES,
+            FPOptions.SCRATCH_FRAMES
+        );
+
+        assertEquals(expected, output.getFP());
+    }
+
+    @Test
+    void frameProcessor_separatedShortForm_parsed() {
+        String[] args = {"-bv", "-p", tempVideoPath};
+
+        CommandLineController output = new CommandLineController(args);
+
+        List<FPOptions> expected = List.of(
+            FPOptions.BLEED_FRAMES,
+            FPOptions.VIGNETTE_FRAMES,
+            FPOptions.PEPPER_FRAMES
+        );
+
+        assertEquals(expected, output.getFP());
+    }
+
+    @Test 
+    void frameProcessor_combinedForm_parsed() {
+        String[] args = {"-dj", "--mottle-frames", tempVideoPath};
+
+        CommandLineController output = new CommandLineController(args);
+
+        List<FPOptions> expected = List.of(
+            FPOptions.DUST_FRAMES,
+            FPOptions.JITTER_FRAMES,
+            FPOptions.MOTTLE_FRAMES
+        );
+
+        assertEquals(expected, output.getFP());
+    }
+
+    @Test 
+    void frameProcessor_repeatedOptions_parsed() {
+        String[] args = {"-jfddn", tempVideoPath};
+
+        CommandLineController output = new CommandLineController(args);
+
+        List<FPOptions> expected = List.of(
+            FPOptions.JITTER_FRAMES,
+            FPOptions.FLICKER_FRAMES,
+            FPOptions.DUST_FRAMES,
+            FPOptions.DUST_FRAMES,
+            FPOptions.NUMBER_FRAMES
+        );
+
+        assertEquals(expected, output.getFP());
+    }
+
+    @Test
+    void frameProcessor_unknownOptions_error() {
+        String[] shortArgs = {"-nzj", tempVideoPath};
+        String[] longArgs = {"--number-frames", "--z-frames", "--jitter-frames", tempVideoPath};
+
+        CommandLineController shortOutput = new CommandLineController(shortArgs);
+        CommandLineController longOutput = new CommandLineController(longArgs);
+
+        String expected = "Unknown option: ";
+
+        assertTrue(shortOutput.getErrorMessage().startsWith(expected));
+        assertTrue(longOutput.getErrorMessage().startsWith(expected));
+        assertTrue(shortOutput.getFP().isEmpty());
+        assertTrue(longOutput.getFP().isEmpty());
+    }
+
+    @Test
+    void frameProcessor_wrongCaseOptions_error() {
+        String[] shortArgs = {"-S", tempVideoPath};
+        String[] longArgs = {"--SRATCH-FRAMES", tempVideoPath};
+
+        CommandLineController shortOutput = new CommandLineController(shortArgs);
+        CommandLineController longOutput = new CommandLineController(longArgs);
+
+        String expected = "Unknown option: ";
+
+        assertTrue(shortOutput.getErrorMessage().startsWith(expected));
+        assertTrue(longOutput.getErrorMessage().startsWith(expected));
     }
 }

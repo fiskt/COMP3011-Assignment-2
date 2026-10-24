@@ -72,6 +72,10 @@ public class FrameMottler extends FrameProcessor {
     private int blockGreenScaleIndex;
     private int blockRedScaleIndex;
 
+    int instanceIndex() {
+        return instanceIndex;
+    }
+
     public FrameMottler() {
         super();
         this.instanceIndex = nextInstanceIndex++;

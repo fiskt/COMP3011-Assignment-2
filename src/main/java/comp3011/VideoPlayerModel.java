@@ -139,7 +139,7 @@ public class VideoPlayerModel {
     // This function loops through the frame processors array built from processing the input
     // For any FrameBleeder, FrameMottler inputs: creates new instances for the thread and adds them to the array
     // For any other frame processor: just adds them to the array
-    private List<FrameProcessor> createWorkProcessors() throws Exception {
+    public List<FrameProcessor> createWorkProcessors(InfoVideo infoVideo) throws Exception {
         List<FrameProcessor> workProcessors = new ArrayList<>();
         int mottleIndex = 0;
 
@@ -147,12 +147,12 @@ public class VideoPlayerModel {
             if (fp instanceof FrameBleeder) {
                 // Create its own instance of FrameBleeder
                 FrameBleeder ownBleeder = new FrameBleeder();
-                ownBleeder.initialise(infoCopy);
+                ownBleeder.initialise(infoVideo);
                 workProcessors.add(ownBleeder);
             } else if (fp instanceof FrameMottler) {
                 // Create its own instance of FrameMottler
                 FrameMottler ownMottler = new FrameMottler(mottleIndex);
-                ownMottler.initialise(infoCopy);
+                ownMottler.initialise(infoVideo);
                 workProcessors.add(ownMottler);
                 mottleIndex++;
             } else {
@@ -214,7 +214,7 @@ public class VideoPlayerModel {
 
                 try {
                     if (workProcessors == null) {
-                        workProcessors = createWorkProcessors();
+                        workProcessors = createWorkProcessors(infoCopy);
                     }
 
                     // From the original readNextVideoFrame function

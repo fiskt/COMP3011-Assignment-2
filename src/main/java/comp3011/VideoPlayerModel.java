@@ -103,12 +103,14 @@ public class VideoPlayerModel {
     // Source - https://stackoverflow.com/a/51551555
     // Posted by Vinay
     // Retrieved 2026-10-07, License - CC BY-SA 4.0
+    // Creates numCores permits
+    // Any thread calling frameSlots.acquire() is blocked until a permit is free
     private final Semaphore frameSlots = new Semaphore(numCores);
 
     // New thread for getting the frames
     private Thread getFramesThread;
 
-    // volatile guarantees that the threads will see the updated status
+    // Volatile guarantees that the threads will see the updated status
     private volatile boolean isGettingFrames;
 
     // Used for initialising the local FrameBleeder, FrameMottler objects for each thread
@@ -230,6 +232,9 @@ public class VideoPlayerModel {
                         System.nanoTime()
                     );
 
+                    // Blocks the put() if there are already numCores elements in processedFrames
+                    // Waits for a processed frame to be displayed before adding another one
+                    // This stops processedFrames from growing too large and causes memory issues
                     frameSlots.acquire();
                     processedFrames.put(pf.frameNumber(), pf);
                 } catch (InterruptedException e) {
